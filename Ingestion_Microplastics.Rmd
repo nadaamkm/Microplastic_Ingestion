@@ -1,0 +1,327 @@
+---
+title: "lab_2"
+output: html_document
+date: "2024-12-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+install.packages("prnaturalearth")
+install.packages("rnaturalearthdata")
+library(tidyverse)
+library(ggplot2)
+library(GGally)
+library(sandwich)
+library(stargazer)
+library(janitor)
+library(dplyr)
+library(car)
+library(lmtest)
+library(gridExtra)
+library(moments)
+library(psych)
+library(patchwork)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# Load world countries
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+#data <- read.delim("Marine_Microplastics_2019_v2.csv", sep=",", header=TRUE)
+data_2019_2021 <- read.delim("Marine_Microplastics_2018_2021.csv", sep=",", header=TRUE)
+
+#mp_sf <- st_as_sf(data, coords=c("Longitude", "Latitude"), crs=4326)
+mp_sf_2019_2021 <- st_as_sf(data_2019_2021, coords=c("Longitude", "Latitude"), crs=4326)
+  
+# Find the nearest country
+#nearest_countries <- st_nearest_feature(mp_sf, world)
+nearest_countries_2019_2021 <- st_nearest_feature(mp_sf_2019_2021, world)
+
+# Add country names to ocean points
+#data$country <- world$admin[nearest_countries]
+data_2019_2021$country <- world$admin[nearest_countries_2019_2021]
+
+# calculate distances
+#distances <- st_distance(mp_sf, world)
+distances_2019_2021 <- st_distance(mp_sf_2019_2021, world)
+
+#min_distances <- apply(distances, 1, min)
+min_distances_2019_2021 <- apply(distances_2019_2021, 1, min)
+
+#data$distance_to_country_km <- as.numeric(min_distances) / 1000
+data_2019_2021$distance_to_country_km <- as.numeric(min_distances_2019_2021) / 1000
+
+write.csv(data_2019_2021, "data_2019_2021.csv")
+# read in gdp per country
+gdp <- read.delim("2019_gdp.csv", sep=",", header=TRUE)
+
+# read in total plastic waste emitted per country
+country_plastics <- read.delim("plastic-waste-emitted-to-the-ocean.csv", sep=",", header=TRUE)
+
+#change the name of some countries in plastic-waste-emitted to the country name syntax in Marine_microplastic
+# Rename specific values in the "country" column
+country_plastics <- country_plastics %>%
+  mutate(Entity = case_when(
+    Entity == "United States" ~ "United States of America",  # Rename United States
+    Entity == "Bahamas" ~ "The Bahamas", 
+    Entity == "Cape Verde" ~ "Cabo Verde",
+    Entity == "Micronesia" ~ "Federated States of Micronesia",
+    Entity == "Hong Kong" ~ "Hong Kong S.A.R.",
+    Entity == "Macau" ~ "Macao S.A.R",
+    TRUE ~ Entity                                            # Keep other values unchanged
+  ))
+
+
+# View the updated dataframe
+print(df)
+
+country_plastics$country <- country_plastics$Entity
+
+# join data with total plastic per country
+#joined_data = merge(data, country_plastics, by='country')
+joined_data_2019_2021 = merge(data_2019_2021, country_plastics, by='country', all.x=TRUE)
+
+# Rename column using colnames()
+colnames(gdp)[colnames(gdp) == "Country.Name"] <- "country"
+colnames(gdp)[colnames(gdp) == "X2019..YR2019."] <- "GDP"
+
+
+gdp <- gdp%>%
+  mutate(country = case_when(
+    country== "United States" ~ "United States of America",  # Rename United States
+    country == "Bahamas, The" ~ "The Bahamas", 
+    country == "Russian Federation" ~ "Russia", 
+    country == "Brunei Darussalam" ~ "Brunei",
+    country == "Micronesia, Fed. Sts." ~ "Federated States of Micronesia",
+    country == "Hong Kong SAR, China" ~ "Hong Kong S.A.R.",
+    country == "Macao SAR, China" ~ "Macao S.A.R",
+    country == "St. Vincent and the Grenadines" ~ "Saint Vincent and the Grenadines",
+    TRUE ~ country                                        # Keep other values unchanged
+  ))
+
+joined_data_2019_2021 = merge(joined_data_2019_2021, gdp, by='country', all.x=TRUE)
+
+
+# filter microplastic unit to pieces/m3
+#filt_mp_data <- subset(joined_data, Unit=="pieces/m3")
+filt_mp_data_2019_2021 <- subset(joined_data_2019_2021, Unit=="pieces/m3")
+
+# rename column
+#filt_mp_data <- filt_mp_data %>% rename_at('Mismanaged.waste.emitted.to.the.ocean..metric.tons.year.1.', ~'WasteEmitted_MetricTonsYear')
+filt_mp_data_2019_2021 <- filt_mp_data_2019_2021 %>% rename_at('Mismanaged.waste.emitted.to.the.ocean..metric.tons.year.1.', ~'WasteEmitted_MetricTonsYear')
+
+ggplot(filt_mp_data_2019_2021, aes(x = WasteEmitted_MetricTonsYear, y = Measurement, color = Entity)) +
+  geom_point(size = 3) +
+  labs(title = "Wasted emitted vs Microplastics",
+       x = "Waste emitted to the ocean (metric tons/year)",
+       y = "Microplastic measured (pieces/m3)")
+
+ggplot(data = world) +
+  geom_sf(fill = "lightblue", color = "gray") +  # Draw world map
+  geom_sf(data = mp_sf_2019_2021, size = 3) +  # Overlay points
+  theme_minimal() +
+  labs(title = "Geographic Points on a World Map",
+       x = "Longitude", y = "Latitude") +
+  theme(legend.position = "bottom")
+
+ggplot(data = world) +
+  geom_sf(fill = "lightblue", color = "gray") +  # Draw world map
+  geom_sf(data = mp_sf_2019_2021, aes(color = Sampling.Method), size = 3) +  # Overlay points
+  theme_minimal() +
+  labs(title = "Geographic Points on a World Map",
+       x = "Longitude", y = "Latitude") +
+  theme(legend.position = "bottom")
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+#unique(filt_mp_data_2019_2021$country)
+#write.csv(filt_mp_data, "filt_mp_data_2019_2021.csv")
+#head(filt_mp_data_2019_2021)
+
+
+# Small constant to avoid division by zero
+epsilon <- 0.01
+filt_mp_data_2019_2021$GDP <- as.numeric(filt_mp_data_2019_2021$GDP)
+# Calculate weights and weighted measurement
+weighted_df <- filt_mp_data_2019_2021 %>%
+  mutate(
+    weight = 1 / (distance_to_country_km + epsilon),       # Calculate weights
+    weighted_measurement = Measurement * weight           # Weighted measurement
+  ) %>%
+  group_by(country) %>%
+  summarise(
+    weighted_measurement = sum(weighted_measurement) / sum(weight), # Weighted average
+    WasteEmitted_MetricTonsYear = mean(WasteEmitted_MetricTonsYear),# Use mean as WasteEmitted is constant per country
+    GDP = mean(GDP)
+  )
+
+# Create scatter plot
+ggplot(weighted_df, aes(x = WasteEmitted_MetricTonsYear, y = weighted_measurement, color = country)) +
+  geom_point(size = 4, alpha = 0.7) +  # Add points
+  labs(
+    title = "Scatter Plot of Weighted Measurement vs. Plastic Waste Emitted",
+    x = "Plastic Waste Emitted (Metric Tons/Year)",
+    y = "Weighted Measurement (pieces/m3)",
+    color = "Country"
+  ) +
+  theme_minimal() +  # Minimal theme
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.title = element_text(size = 12)
+  )
+
+write.csv(weighted_df, "weighted_df.csv")
+
+```
+```{r pressure, echo=FALSE}
+ggplot(weighted_df, aes(x = WasteEmitted_MetricTonsYear, y = weighted_measurement)) +
+  geom_point() +
+  labs(
+    title = "Logged Microplastic Number Density vs. Waste Emitted (with Model)",
+    x = "Waste Emitted to Ocean (metric tons / yr) (logged)",  # X-axis label
+    y = "Weighted Avg. Microplastic Number Density (particles/m^3) (logged)"   # Y-axis label
+  ) +
+  theme_minimal() +
+  scale_y_log10() +
+  scale_x_log10()
+
+
+ggplot(weighted_df, aes(x = WasteEmitted_MetricTonsYear, y = weighted_measurement)) +
+  geom_point() +
+  labs(
+    title = "Logged Microplastic Number Density vs. Waste Emitted (with Model)",
+    x = "Waste Emitted to Ocean (metric tons / yr) (logged)",  # X-axis label
+    y = "Weighted Avg. Microplastic Number Density (particles/m^3) (logged)"   # Y-axis label
+  ) +
+
+  geom_smooth(method = "lm", formula = y ~ x, color = "blue", se = FALSE) +  # Linear regression line
+  theme_minimal() +
+  scale_y_log10() +
+  scale_x_log10()
+
+```
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r pressure, echo=FALSE}
+library(dplyr)
+
+# Assuming 'df' is your dataframe
+weighted_df <- weighted_df %>% filter_all(all_vars(. != 0))
+
+model = lm(log10(weighted_measurement) ~ log10(WasteEmitted_MetricTonsYear), data=weighted_df)
+summary(model)
+
+
+```
+
+```{r pressure, echo=FALSE}
+ggplot(weighted_df, aes(x = GDP, y = weighted_measurement)) +
+  geom_point() +
+  labs(
+    title = "Logged Microplastic Number Density vs. GDP (with Model)",
+    x = "GDP",  # X-axis label
+    y = "Weighted Avg. Microplastic Number Density (particles/m^3) "   # Y-axis label
+  ) +
+  theme_minimal() 
+
+ggplot(weighted_df, aes(x = GDP, y = weighted_measurement)) +
+  geom_point() +
+  labs(
+    title = "Logged Microplastic Number Density vs. GDP (with Model)",
+    x = "GDP",  # X-axis label
+    y = "Weighted Avg. Microplastic Number Density (particles/m^3) (logged)"   # Y-axis label
+  ) +
+  theme_minimal() +
+  scale_y_log10() +
+  scale_x_log10()
+
+ggplot(weighted_df, aes(x = WasteEmitted_MetricTonsYear + GDP, y = weighted_measurement)) +
+  geom_point() +
+  labs(
+    title = "Logged Microplastic Number Density vs. Waste Emitted and GDP (with Model)",
+    x = "Waste Emitted to Ocean (metric tons / yr) (logged) and GDP (logged)",  # X-axis label
+    y = "Weighted Avg. Microplastic Number Density (particles/m^3) (logged)"   # Y-axis label
+  ) +
+  theme_minimal() +
+  scale_y_log10() +
+  scale_x_log10()
+
+
+ggplot(weighted_df, aes(x = log10(WasteEmitted_MetricTonsYear) + log10(GDP), y = weighted_measurement)) +
+  geom_point() +
+  labs(
+    title = "Logged Microplastic Number Density vs. Waste Emitted and GDP (with Model)",
+    x = "Waste Emitted to Ocean (metric tons / yr) (logged) and GDP (logged)",  # X-axis label
+    y = "Weighted Avg. Microplastic Number Density (particles/m^3) (logged)"   # Y-axis label
+  ) +
+
+  geom_smooth(method = "lm", formula = y ~ x, color = "blue", se = FALSE) +  # Linear regression line
+  theme_minimal() +
+  scale_y_log10() 
+
+model = lm(log10(weighted_measurement) ~ log10(WasteEmitted_MetricTonsYear) + log10(GDP), data=weighted_df)
+summary(model)
+
+
+```
+```{r pressure, echo=FALSE}
+
+# calculating robust standard errors to account for heteroskedasticity
+# Calculate robust standard errors
+robust_se <- coeftest(model, vcov = vcovHC(model, type = "HC1"))
+print(robust_se)
+## p_value indicates that waste emitted is statistically significant
+
+
+```
+```{r pressure, echo=FALSE}
+
+# calculating correlation matrix
+# Install and load the package
+install.packages("corrplot")
+library(corrplot)
+
+
+# Select only numeric columns
+numeric_data <- weighted_df[sapply(weighted_df, is.numeric)]
+# Convert a character column to numeric
+
+
+# Calculate correlation matrix
+cor_matrix <- cor(numeric_data, use = "complete.obs")
+
+# Create a heatmap
+corrplot(cor_matrix, method = "color", tl.col = "black", addCoef.col = "white")
+
+
+```
+```{r}
+
+# Create a histogram
+hist(log10(numeric_data$weighted_measurement), 
+     main = "Histogram of Weighted Plastic Measurement", 
+     xlab = "Weighted Measurement", 
+     col = "skyblue", 
+     border = "black")
+# Create a histogram
+hist(log10(numeric_data$WasteEmitted_MetricTonsYear), 
+     main = "Histogram of Emmitted Waste", 
+     xlab = "Waste Emmitted (tons)", 
+     col = "skyblue", 
+     border = "black")
+
+```
